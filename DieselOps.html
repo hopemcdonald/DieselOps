@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DieselOps – work orders and parts prices for diesel shops</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#dfe3e6;--panel:#f6f7f7;--ink:#14191c;--mute:#5b666c;--line:#b9c1c6;--acc:#0f5c7a;--acc-ink:#fff;--warn:#b3261e;--ok:#2e6b3a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15191c;--panel:#1e2428;--ink:#e8ecee;--mute:#93a0a6;--line:#38424a;--acc:#5db7d6;--acc-ink:#0b1418;--warn:#ff8a80;--ok:#7fce8e}}
+:root[data-theme="dark"]{--bg:#15191c;--panel:#1e2428;--ink:#e8ecee;--mute:#93a0a6;--line:#38424a;--acc:#5db7d6;--acc-ink:#0b1418;--warn:#ff8a80;--ok:#7fce8e}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 16px/1.45 Barlow,system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1,h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;margin:0;letter-spacing:.01em}
+h1{font-size:2.2rem;line-height:1}
+h2{font-size:1.35rem}
+.sub{color:var(--mute);margin:4px 0 14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);padding:10px}
+.stat b{display:block;font:700 1.9rem/1 "Barlow Condensed",sans-serif}
+.stat span{color:var(--mute);font-size:.85rem}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{flex:1}
+button,input,select,textarea{font:inherit;color:inherit}
+button{min-height:44px;padding:8px 14px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:600}
+button.on,button.pri{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+button.del{color:var(--warn)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+input,select,textarea{width:100%;min-height:44px;padding:8px 10px;border:1px solid var(--line);background:var(--panel)}
+textarea{min-height:80px}
+.card{background:var(--panel);border:1px solid var(--line);padding:12px;margin-bottom:10px}
+.grid{display:grid;gap:8px}
+.g2{grid-template-columns:1fr 1fr}
+.g4{grid-template-columns:1.2fr 3fr .8fr 1fr}
+@media(max-width:560px){.g2,.g4{grid-template-columns:1fr 1fr}.g4 input:nth-child(2){grid-column:1/-1;order:-1}}
+details{background:var(--panel);border:1px solid var(--line);margin-bottom:8px;border-left:6px solid var(--mute)}
+details.s-Waiting{border-left-color:var(--warn)}details.s-Repairing{border-left-color:var(--acc)}details.s-Done{border-left-color:var(--ok)}
+summary{padding:12px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;list-style:none}
+summary small{color:var(--mute);display:block}
+.body{padding:0 12px 12px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:.95rem}
+td.n,th.n{text-align:right}
+.best{color:var(--ok);font-weight:700}
+.out{color:var(--warn)}
+.scroll{overflow-x:auto}.lines{min-width:560px}.lines input,.lines select{min-height:40px;padding:4px 6px}.lines td:nth-child(1){width:92px}.lines td:nth-child(3),.lines td:nth-child(4){width:92px}.sum{margin:8px 0}.ex{margin-top:8px}
+.note{color:var(--mute);font-size:.85rem}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+@media(prefers-reduced-motion:no-preference){details[open] .body{animation:d .15s ease-out}@keyframes d{from{opacity:.4}}}
+</style>
+</head>
+<body>
+<main>
+<h1>DieselOps</h1>
+<p class="sub">Work orders and parts prices for independent diesel shops.</p>
+<div class="stats" id="stats"></div>
+<nav><button id="t-orders" class="on">Work orders</button><button id="t-parts">Parts prices</button></nav>
+<section id="orders">
+  <div class="card">
+    <h2>New work order</h2>
+    <div class="grid g2" style="margin-top:8px">
+      <input id="f-cust" placeholder="Customer or fleet" aria-label="Customer or fleet">
+      <input id="f-unit" placeholder="Unit # or VIN" aria-label="Unit number or VIN">
+    </div>
+    <input id="f-comp" placeholder="Complaint (e.g. derate, no start)" aria-label="Complaint" style="margin:8px 0">
+    <button class="pri" id="add">Open work order</button>
+  </div>
+  <div class="row" style="margin-bottom:8px"><span><button id="f-open" class="on">Open</button> <button id="f-closed">Closed</button></span><label class="note">Labor rate $/hr <input id="rate" type="number" min="0" style="width:90px"></label></div><div id="list"></div>
+</section>
+<section id="parts" hidden>
+  <div class="card">
+    <input id="q" placeholder="Search parts (e.g. injector, DPF, turbo)" aria-label="Search parts">
+    <p class="note">Sample prices for the demo. Supplier feeds are not connected yet.</p>
+  </div>
+  <div id="plist"></div>
+</section>
+</main>
+<script>
+var RATE=145, KEY="bayboard-v1";
+var PARTS=[
+{n:"Fuel injector, 6.7L Cummins",s:{"Supplier A":[389,12],"Supplier B":[412,3],"Supplier C":[365,0]}},
+{n:"DPF filter, Cummins ISX15",s:{"Supplier A":[2140,2],"Supplier B":[1980,5],"Supplier C":[2260,1]}},
+{n:"Turbocharger, Detroit DD15",s:{"Supplier A":[1295,4],"Supplier B":[1350,9],"Supplier C":[1240,0]}},
+{n:"EGR cooler, Cat C13",s:{"Supplier A":[870,6],"Supplier B":[815,2],"Supplier C":[905,8]}},
+{n:"DEF pump, Paccar MX-13",s:{"Supplier A":[640,3],"Supplier B":[690,7],"Supplier C":[612,1]}},
+{n:"Fuel filter kit, Freightliner",s:{"Supplier A":[58,40],"Supplier B":[52,0],"Supplier C":[61,25]}}
+];
+var TPL=[
+{n:"Kingpin replacement, per axle",h:7,p:[["King pin kit, per side",2,285],["Thrust bearing and seal kit",2,95],["Grease and hardware",1,45]]},
+{n:"Brake job, drum, per axle",h:5,p:[["Brake shoe kit, axle set",1,210],["Brake drum",2,185],["Hub seal",2,28],["Brake hardware kit",1,40]]},
+{n:"Air brake chamber, each",h:1.5,p:[["Air brake chamber",1,95]]},
+{n:"Clutch replacement",h:12,p:[["Clutch kit",1,1250],["Pilot and release bearing",1,185],["Flywheel resurface",1,150]]},
+{n:"Transmission fluid service",h:1.5,p:[["Synthetic transmission fluid, gal",4,60],["Drain plug and gasket",1,12]]},
+{n:"Wheel seal and bearing, per hub",h:2.5,p:[["Wheel seal",1,35],["Wheel bearing set",1,110]]},
+{n:"PM service, oil and filters",h:1.5,p:[["Engine oil, gal",10,28],["Oil filter",1,32],["Fuel filter",2,45]]},
+{n:"DPF cleaning",h:3,p:[["DPF cleaning service, outsourced",1,275]]},
+{n:"Turbocharger replacement",h:6,p:[["Turbocharger",1,1295],["Gasket and hardware kit",1,85]]},
+{n:"DEF pump replacement",h:2.5,p:[["DEF pump",1,640]]}
+];
+var custom=[];try{custom=JSON.parse(localStorage.getItem("bayboard-tpl")||"[]")}catch(e){}
+try{var r0=parseFloat(localStorage.getItem("bayboard-rate"));if(r0>0)RATE=r0}catch(e){}
+var view="open";
+function alltpl(){return TPL.concat(custom)}
+function sums(o){var l=0,p=0;o.lines.forEach(function(x){if(x.t==="labor")l+=x.q*x.p;else p+=x.q*x.p});return[l,p]}
+function sumHtml(o){var s=sums(o);return "Labor "+money(s[0])+" &nbsp; Parts "+money(s[1])+" &nbsp; <b>Total "+money(s[0]+s[1])+"</b>"}
+var orders=[];
+try{orders=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){orders=[]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(orders))}catch(e){}}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function $(i){return document.getElementById(i)}
+function money(n){return "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+function total(o){return o.lines.reduce(function(a,l){return a+l.q*l.p},0)}
+function days(o){var end=o.done||Date.now();return Math.max(0,Math.round((end-o.opened)/864e5*10)/10)}
+function stats(){
+  var open=orders.filter(function(o){return o.status!=="Done"});
+  var avg=open.length?open.reduce(function(a,o){return a+days(o)},0)/open.length:0;
+  $("stats").innerHTML='<div class="stat"><b>'+open.length+'</b><span>Trucks in shop</span></div><div class="stat"><b>'+avg.toFixed(1)+'</b><span>Avg days down</span></div><div class="stat"><b>'+money(orders.reduce(function(a,o){return a+total(o)},0)).replace(/\.\d+$/,"")+'</b><span>Total quoted</span></div>';
+}
+function tr(o,l,i){var opts=["labor","part"].map(function(t){return '<option value="'+t+'"'+(l.t===t?" selected":"")+'>'+(t==="labor"?"Labor":"Part")+'</option>'}).join("");
+return '<tr data-i="'+i+'"><td><select data-f="t" aria-label="Type">'+opts+'</select></td><td><input data-f="d" value="'+esc(l.d)+'" placeholder="Description" aria-label="Item"></td><td><input data-f="q" type="number" step="0.1" min="0" value="'+l.q+'" aria-label="Quantity or hours"></td><td><input data-f="p" type="number" step="0.01" min="0" value="'+l.p+'" aria-label="Price"></td><td class="n lt">'+money(l.q*l.p)+'</td><td><button class="del" data-a="rl" data-id="'+o.id+'" data-i="'+i+'" aria-label="Remove line">×</button></td></tr>'}
+function renderOrders(){
+  var openIds=[].slice.call(document.querySelectorAll("#list details[open]")).map(function(d){return d.dataset.id});
+  var nOpen=orders.filter(function(o){return o.status!=="Done"}).length;
+  var shown=orders.filter(function(o){return(o.status==="Done")===(view==="closed")});
+  $("f-open").textContent="Open ("+nOpen+")";$("f-closed").textContent="Closed ("+(orders.length-nOpen)+")";
+  $("f-open").className=view==="open"?"on":"";$("f-closed").className=view==="closed"?"on":"";
+  stats();
+  if(!shown.length){$("list").innerHTML='<p class="note">'+(view==="open"?"No open work orders. Open one above to start an estimate.":"No closed work orders yet. Close a finished job and it moves here.")+'</p>';return}
+  var tp=alltpl().map(function(t,i){return '<option value="'+i+'">'+esc(t.n)+'</option>'}).join("");
+  $("list").innerHTML=shown.map(function(o){
+    var done=o.status==="Done";
+    return '<details class="s-'+o.status+'" data-id="'+o.id+'"'+(openIds.indexOf(String(o.id))>-1?" open":"")+'><summary><span><b>'+esc(o.cust||"No customer")+'</b>, '+esc(o.unit||"no unit")+'<small>'+esc(o.comp||"No complaint entered")+'</small></span><span style="text-align:right"><b class="amt">'+money(total(o))+'</b><small>'+o.status+', '+days(o)+' days</small></span></summary><div class="body">'
+    +'<div class="row">'+(done?'<b>Closed '+new Date(o.done).toLocaleDateString()+'</b>':'<select data-a="st" aria-label="Status" style="width:auto">'+["Waiting","Repairing"].map(function(s){return '<option'+(s===o.status?" selected":"")+'>'+s+'</option>'}).join("")+'</select>')+'<button class="del" data-a="dl" data-id="'+o.id+'">Delete order</button></div>'
+    +'<div class="row" style="margin:8px 0"><select id="tp'+o.id+'" aria-label="Repair type" style="flex:1">'+tp+'</select><button data-a="tp" data-id="'+o.id+'">Add repair</button></div>'
+    +'<div class="scroll"><table class="lines"><tr><th>Type</th><th>Item</th><th class="n">Qty / hrs</th><th class="n">Price</th><th class="n">Total</th><th></th></tr>'+o.lines.map(function(l,i){return tr(o,l,i)}).join("")+'</table></div>'
+    +'<div class="row"><button data-a="al" data-id="'+o.id+'">+ Add line</button><span class="row"><input id="sn'+o.id+'" placeholder="Name for repair type" aria-label="Repair type name" style="width:170px"><button data-a="sv" data-id="'+o.id+'">Save as repair type</button></span></div>'
+    +'<p class="sum">'+sumHtml(o)+'</p>'
+    +'<h2>Tech notes</h2><textarea data-a="nt" placeholder="Findings, fault codes, what you did" aria-label="Tech notes">'+esc(o.notes||"")+'</textarea>'
+    +'<div class="row" style="margin-top:8px"><button data-a="cp" data-id="'+o.id+'">Copy estimate</button>'+(done?'<button data-a="ro" data-id="'+o.id+'">Reopen</button>':'<button class="pri" data-a="cl" data-id="'+o.id+'">Close order</button>')+'</div>'
+    +'<textarea class="ex" readonly hidden aria-label="Estimate text"></textarea></div></details>';
+  }).join("");
+}
+function find(id){return orders.filter(function(o){return String(o.id)===String(id)})[0]}
+$("add").onclick=function(){
+  var c=$("f-cust").value.trim(),u=$("f-unit").value.trim(),m=$("f-comp").value.trim();
+  if(!c&&!u){$("f-cust").focus();return}
+  orders.unshift({id:Date.now(),cust:c,unit:u,comp:m,status:"Waiting",opened:Date.now(),lines:[],notes:""});
+  $("f-cust").value=$("f-unit").value=$("f-comp").value="";save();renderOrders();
+};
+$("list").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;var o=find(b.dataset.id),a=b.dataset.a;if(!o)return;
+  if(a==="al"){o.lines.push({t:"part",d:"",q:1,p:0});save();renderOrders();var rs=document.querySelectorAll('details[data-id="'+o.id+'"] tr[data-i]');if(rs.length)rs[rs.length-1].querySelector('[data-f="d"]').focus()}
+  if(a==="rl"){o.lines.splice(+b.dataset.i,1);save();renderOrders()}
+  if(a==="tp"){var t=alltpl()[$("tp"+o.id).value];if(!t)return;o.lines.push({t:"labor",d:t.n+", labor",q:t.h,p:RATE});t.p.forEach(function(x){o.lines.push({t:"part",d:x[0],q:x[1],p:x[2]})});save();renderOrders()}
+  if(a==="sv"){var n=$("sn"+o.id).value.trim();if(!n){$("sn"+o.id).focus();return}
+    var h=0;o.lines.forEach(function(l){if(l.t==="labor")h+=l.q});
+    custom.push({n:n,h:h,p:o.lines.filter(function(l){return l.t==="part"}).map(function(l){return[l.d,l.q,l.p]})});
+    try{localStorage.setItem("bayboard-tpl",JSON.stringify(custom))}catch(x){}renderOrders()}
+  if(a==="cl"){o.status="Done";o.done=Date.now();save();renderOrders()}
+  if(a==="ro"){o.status="Waiting";o.done=null;save();renderOrders()}
+  if(a==="dl"){if(b.dataset.arm){orders=orders.filter(function(x){return x!==o});save();renderOrders()}else{b.dataset.arm=1;b.textContent="Tap again to delete";setTimeout(function(){b.dataset.arm="";b.textContent="Delete order"},3000)}}
+  if(a==="cp"){var txt="ESTIMATE: "+o.cust+", "+o.unit+"\n"+o.comp+"\n\n"+o.lines.map(function(l){return l.d+": "+l.q+" x "+money(l.p)+" = "+money(l.q*l.p)}).join("\n")+"\n\nTotal: "+money(total(o));
+    var ex=b.closest("details").querySelector(".ex");ex.value=txt;ex.hidden=false;ex.rows=8;
+    try{navigator.clipboard.writeText(txt).then(function(){b.textContent="Copied"},function(){b.textContent="Select and copy below"})}catch(x){b.textContent="Select and copy below"}}
+});
+$("list").addEventListener("change",function(e){
+  var el=e.target,det=el.closest("details");if(!det)return;var o=find(det.dataset.id);if(!o)return;
+  if(el.dataset.a==="st"){o.status=el.value;save();renderOrders();return}
+  if(el.dataset.a==="nt"){o.notes=el.value;save();return}
+  var f=el.dataset.f,row=el.closest("tr");if(!f||!row)return;var l=o.lines[+row.dataset.i];
+  l[f]=(f==="q"||f==="p")?(parseFloat(el.value)||0):el.value;
+  if(f==="t"&&el.value==="labor"&&!l.p)l.p=RATE;
+  save();
+  if(f==="t"){renderOrders();return}
+  row.querySelector(".lt").textContent=money(l.q*l.p);det.querySelector(".sum").innerHTML=sumHtml(o);det.querySelector(".amt").textContent=money(total(o));stats();
+});
+$("f-open").onclick=function(){view="open";renderOrders()};
+$("f-closed").onclick=function(){view="closed";renderOrders()};
+$("rate").onchange=function(){var v=parseFloat(this.value);if(v>0){RATE=v;try{localStorage.setItem("bayboard-rate",v)}catch(e){}}};
+function renderParts(){
+  var q=$("q").value.toLowerCase(),sel=orders.filter(function(o){return o.status!=="Done"});
+  var hits=PARTS.filter(function(p){return p.n.toLowerCase().indexOf(q)>-1});
+  $("plist").innerHTML=hits.length?hits.map(function(p,pi){
+    var names=Object.keys(p.s),best=Math.min.apply(null,names.filter(function(k){return p.s[k][1]>0}).map(function(k){return p.s[k][0]}));
+    return '<div class="card"><h2>'+esc(p.n)+'</h2><table>'+names.map(function(k){var v=p.s[k];return '<tr><td>'+k+'</td><td class="n'+(v[0]===best&&v[1]>0?" best":"")+'">'+money(v[0])+'</td><td class="n '+(v[1]?"":"out")+'">'+(v[1]?v[1]+" in stock":"Out of stock")+'</td></tr>'}).join("")+'</table>'
+    +(sel.length?'<div class="row"><select id="ao'+pi+'" aria-label="Work order">'+sel.map(function(o){return '<option value="'+o.id+'">'+esc(o.cust||"No customer")+' · '+esc(o.unit||"")+'</option>'}).join("")+'</select><button data-pi="'+pi+'" data-best="'+best+'">Add best price to order</button></div>':'<p class="note">Open a work order to add parts to it.</p>')+'</div>';
+  }).join(""):'<p class="note">No parts match. Try a shorter search.</p>';
+}
+$("q").oninput=renderParts;
+$("plist").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;var o=find($("ao"+b.dataset.pi).value);if(!o)return;
+  o.lines.push({t:"part",d:PARTS[b.dataset.pi].n,q:1,p:+b.dataset.best});save();b.textContent="Added";renderOrders();
+});
+function tab(n){["orders","parts"].forEach(function(k){$(k).hidden=k!==n;$("t-"+k).className=k===n?"on":""});if(n==="parts")renderParts()}
+$("t-orders").onclick=function(){tab("orders")};$("t-parts").onclick=function(){tab("parts")};
+$("rate").value=RATE;renderOrders();
+</script>
+</body>
+</html>
